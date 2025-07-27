@@ -217,8 +217,14 @@ namespace EzPE
             return true;
         }
 
-        bool loadFromResource(HRSRC h_resource)
+        bool loadFromResource(HRSRC h_resource, PE_Properties specified_properties)
         {
+            if (is_loaded)
+            {
+                setError("loadFromResource(): PE is already loaded. Explicitly clear it before loading again");
+                return false;
+            }
+
             HGLOBAL h_memory{LoadResource(0, h_resource)};
 
             if (!h_memory)
@@ -234,6 +240,92 @@ namespace EzPE
             {
                 setError("loadFromResource(): Failed to get size of resource or to lock it");
                 return false;
+            }
+
+            p_dos_header = reinterpret_cast<IMAGE_DOS_HEADER *>(new char[resource_size]);
+            properties = specified_properties;
+            is_allocated = true;
+            memcpy(p_dos_header, p_resource_data, resource_size);
+
+            if (p_dos_header->e_magic != IMAGE_DOS_SIGNATURE)
+            {
+                clear();
+                setError("loadFromResource(): File's DOS signature is invalid");
+                return false;
+            }
+
+            size_t file_nt_size{p_dos_header->e_lfanew + sizeof(uint32_t) + sizeof(IMAGE_FILE_HEADER) + sizeof(IMAGE_OPTIONAL_HEADER)};
+
+            if (resource_size < file_nt_size)
+            {
+                clear();
+                setError("loadFromResource(): File's size is not large enough to possibly contain all NT headers");
+                return false;
+            }
+
+            // Set up pointers
+            p_dos_stub = reinterpret_cast<uint8_t *>(reinterpret_cast<uintptr_t>(p_dos_header) + sizeof(IMAGE_DOS_HEADER));
+            p_signature = reinterpret_cast<uint32_t *>(reinterpret_cast<uintptr_t>(p_dos_header) + p_dos_header->e_lfanew);
+
+            if (*p_signature != IMAGE_NT_SIGNATURE)
+            {
+                clear();
+                setError("loadFromResource(): File's NT signature is invalid");
+                return false;
+            }
+
+            p_file_header = reinterpret_cast<IMAGE_FILE_HEADER *>(reinterpret_cast<uintptr_t>(p_signature) + sizeof(uint32_t));
+
+            std::streampos theoretical_section_headers_size{p_file_header->NumberOfSections * sizeof(IMAGE_SECTION_HEADER)};
+            if (resource_size < file_nt_size + theoretical_section_headers_size)
+            {
+                clear();
+                setError("loadFromResource(): File is missing some or all of its section headers");
+                return false;
+            }
+
+            p_optional_header = reinterpret_cast<IMAGE_OPTIONAL_HEADER *>(reinterpret_cast<uintptr_t>(p_file_header) + sizeof(IMAGE_FILE_HEADER));
+
+            if (p_file_header->NumberOfSections > 0)
+            {
+                p_first_section_header = reinterpret_cast<IMAGE_SECTION_HEADER *>(reinterpret_cast<uintptr_t>(p_optional_header) + sizeof(IMAGE_OPTIONAL_HEADER));
+
+                if (hasProperty(PE_Properties::DATA))
+                {
+                    p_start_of_data = reinterpret_cast<uint8_t *>(reinterpret_cast<uintptr_t>(p_first_section_header) + theoretical_section_headers_size);
+
+                    /* Sections data validation depends on if the image was resolved on not */
+                    if (hasProperty(PE_Properties::RESOLVED))
+                    {
+                        IMAGE_SECTION_HEADER *p_last_section{findLastSectionAlignedSection()};
+
+                        if (p_last_section == nullptr)
+                        {
+                            clear();
+                            setError("loadFromResource(): Failed to get last section aligned section (maybe the PE isn't resolved)");
+                            return false;
+                        }
+
+                        if (resource_size < p_last_section->VirtualAddress + p_last_section->Misc.VirtualSize)
+                        {
+                            clear();
+                            setError("loadFromResource(): File's size is too small to possibly contain all the sections' data");
+                            return false;
+                        }
+                    }
+                    else
+                    {
+                        IMAGE_SECTION_HEADER *p_last_section{findLastFileAlignedSection()};
+
+                        /* It "could" be possible that no section has raw data */
+                        if (p_last_section != nullptr && resource_size < p_last_section->PointerToRawData + p_last_section->SizeOfRawData)
+                        {
+                            clear();
+                            setError("loadFromFile(): File's size is too small to possibly contain all the sections' data");
+                            return false;
+                        }
+                    }
+                }
             }
 
             is_loaded = true;
