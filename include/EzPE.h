@@ -184,17 +184,17 @@ namespace EzPE
         // [LOCAL_SECTION] Getters
         //
 
-        std::string getErrorMessage()
+        const std::string &getErrorMessage() const
         {
             return error_message;
         }
 
-        bool getHasError()
+        bool getHasError() const
         {
             return has_error;
         }
 
-        bool getIsLoaded()
+        bool getIsLoaded() const
         {
             return is_loaded;
         }
