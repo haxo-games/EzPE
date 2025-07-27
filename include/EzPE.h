@@ -34,6 +34,58 @@ namespace EzPE
     class PE
     {
     public:
+        //
+        // [LOCAL_SECTION] Types
+        //
+
+        class Section
+        {
+        public:
+            IMAGE_SECTION_HEADER header;
+
+            Section(PE &_pe)
+                : pe(_pe) {};
+
+            Section &name(const char *name)
+            {
+                memcpy(header.Name, name, (std::min)(static_cast<int>(strlen(name)), 8));
+                return *this;
+            }
+
+            Section &data(size_t virtual_size, size_t file_size = 0, void *p_init_with = nullptr)
+            {
+                if (file_size != 0)
+                    this->p_init_with = p_init_with;
+
+                if (virtual_size == 0 || virtual_size < file_size)
+                    pe.setError("Failed to set section data. Invalid virtual size.");
+
+                header.Misc.VirtualSize = virtual_size;
+                header.SizeOfRawData = pe.alignToFile(file_size);
+
+                return *this;
+            }
+
+            Section &characteristics(uint32_t input)
+            {
+                header.Characteristics = input;
+                return *this;
+            }
+
+            void insert()
+            {
+                // TODO
+            }
+
+        private:
+            void *p_init_with;
+            PE &pe;
+        };
+
+        //
+        // [LOCAL_SECTION] Variables and constants
+        //
+
         IMAGE_DOS_HEADER *p_dos_header{};
         uint8_t *p_dos_stub{};
         uint32_t *p_signature{};
@@ -44,7 +96,7 @@ namespace EzPE
         PE_Properties properties{};
 
         //
-        // [LOCAL_SECTION] Constructors & destructors
+        // [LOCAL_SECTION] Utilities
         //
 
         PE() {};
@@ -71,10 +123,6 @@ namespace EzPE
         {
             clear();
         }
-
-        //
-        // [LOCAL_SECTION] Utilities
-        //
 
         bool loadFromFile(const char *path, PE_Properties specified_properties)
         {
