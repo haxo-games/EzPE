@@ -321,7 +321,7 @@ namespace EzPE
                         if (p_last_section != nullptr && resource_size < p_last_section->PointerToRawData + p_last_section->SizeOfRawData)
                         {
                             clear();
-                            setError("loadFromFile(): File's size is too small to possibly contain all the sections' data");
+                            setError("loadFromResource(): Resource size is too small to possibly contain all the sections' data");
                             return false;
                         }
                     }
