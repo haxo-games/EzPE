@@ -1,3 +1,12 @@
+// ███████ ███████ ██████  ███████
+// ██         ███  ██   ██ ██
+// █████     ███   ██████  █████    PE header-only utility library
+// ██       ███    ██      ██       version 0.0.0
+// ███████ ███████ ██      ███████  https://github.com/haxo-games/EzPE
+//
+// SPDX-FileCopyrightText: 2024 - 2025 Haxo Games Inc. <https://haxo.games>
+// SPDX-License-Identifier: MIT
+
 #pragma once
 
 #include <cstdint>
