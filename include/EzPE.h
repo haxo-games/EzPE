@@ -36,6 +36,7 @@ namespace EzPE
         // [LOCAL_SECTION] Constructors & destructors
         //
 
+        PE(void){};
         PE(const char *path, PE_Properties specified_properties)
         {
             loadFromFile(path, specified_properties);
@@ -68,7 +69,7 @@ namespace EzPE
                 return false;
             }
 
-            std::streampos file_size{file.tellg()};
+            size_t file_size{file.tellg()};
             file.seekg(0);
 
             if (file_size < sizeof(IMAGE_DOS_HEADER))
@@ -97,7 +98,7 @@ namespace EzPE
                 return false;
             }
 
-            std::streampos file_nt_size{p_dos_header->e_lfanew + sizeof(uint32_t) + sizeof(IMAGE_FILE_HEADER) + sizeof(IMAGE_OPTIONAL_HEADER)};
+            size_t file_nt_size{p_dos_header->e_lfanew + sizeof(uint32_t) + sizeof(IMAGE_FILE_HEADER) + sizeof(IMAGE_OPTIONAL_HEADER)};
 
             if (file_size < file_nt_size)
             {
@@ -176,6 +177,46 @@ namespace EzPE
             return true;
         }
 
+        bool loadFromMemory( void* module, PE_Properties specified_properties )
+        {
+            if (is_loaded)
+            {
+                setError("loadFromMemory(): PE is already loaded. Explicitly clear it before loading again");
+                return false;
+            }
+
+            const uintptr_t base{ reinterpret_cast<uintptr_t>(module) };
+
+            p_dos_header = reinterpret_cast<IMAGE_DOS_HEADER*>(base);
+
+            if (p_dos_header->e_magic != IMAGE_DOS_SIGNATURE)
+            {
+                setError("loadFromMemory(): Invalid DOS signature \"0x%x\", should be 0x%x", p_dos_header->e_magic, IMAGE_DOS_SIGNATURE);
+                clear(false);
+
+                return false;
+            }
+
+            p_dos_stub = reinterpret_cast<uint8_t*>(base + sizeof(*p_dos_header));
+            p_signature = reinterpret_cast<uint32_t*>(base + p_dos_header->e_lfanew);
+
+            if (*p_signature != IMAGE_NT_SIGNATURE)
+            {
+                setError("loadFromMemory(): Invalid NT signature \"0x%x\", should be 0x%x", *p_signature, IMAGE_NT_SIGNATURE);
+                clear(false);
+
+                return false;
+            }
+
+            p_file_header = reinterpret_cast<IMAGE_FILE_HEADER*>(reinterpret_cast<uintptr_t>(p_signature) + sizeof(*p_signature));
+            p_optional_header = reinterpret_cast<IMAGE_OPTIONAL_HEADER*>(reinterpret_cast<uintptr_t>(p_file_header) + sizeof(*p_file_header));
+
+            is_loaded = true;
+            properties = specified_properties;
+
+            return true;
+        }
+
         IMAGE_SECTION_HEADER *findLastFileAlignedSection() const
         {
             if (!is_loaded || p_first_section_header == nullptr)
@@ -215,7 +256,7 @@ namespace EzPE
             return p_last_section;
         }
 
-        void clear()
+        void clear(bool clear_error_string=true)
         {
             if (is_allocated)
             {
@@ -223,7 +264,7 @@ namespace EzPE
                 is_allocated = false;
             }
 
-            if (has_error)
+            if (has_error && clear_error_string)
                 setError("");
 
             // Reset members
@@ -266,18 +307,26 @@ namespace EzPE
         // [LOCAL_SECTION] Setters
         //
 
-        void setError(std::string message)
+        void setError(std::string fmt, ...)
         {
             /* Clear error if empty message */
-            if (message.size() == 0)
+            if ( fmt.size() == 0 )
             {
                 has_error = false;
                 error_message.clear();
                 return;
             }
 
+            va_list args;
+            va_start( args, fmt );
+
+            char* buf{ new char[0x1000] };
+            vsprintf_s( buf, 0x1000, fmt.c_str(), args );
+            error_message = buf;
+
+            delete[] buf;
+            va_end( args );
             has_error = true;
-            error_message = message;
         }
 
     private:
