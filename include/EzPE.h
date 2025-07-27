@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cstdarg>
 
 #include <fstream>
 #include <type_traits>
@@ -102,90 +103,9 @@ namespace EzPE
                 return false;
             }
 
-            if (p_dos_header->e_magic != IMAGE_DOS_SIGNATURE)
-            {
-                clear();
-                setError("loadFromFile(): File's DOS signature is invalid");
-                return false;
-            }
-
-            size_t file_nt_size{p_dos_header->e_lfanew + sizeof(uint32_t) + sizeof(IMAGE_FILE_HEADER) + sizeof(IMAGE_OPTIONAL_HEADER)};
-
-            if (file_size < file_nt_size)
-            {
-                clear();
-                setError("loadFromFile(): File's size is not large enough to possibly contain all NT headers");
-                return false;
-            }
-
-            // Set up pointers
-            p_dos_stub = reinterpret_cast<uint8_t *>(reinterpret_cast<uintptr_t>(p_dos_header) + sizeof(IMAGE_DOS_HEADER));
-            p_signature = reinterpret_cast<uint32_t *>(reinterpret_cast<uintptr_t>(p_dos_header) + p_dos_header->e_lfanew);
-
-            if (*p_signature != IMAGE_NT_SIGNATURE)
-            {
-                clear();
-                setError("loadFromFile(): File's NT signature is invalid");
-                return false;
-            }
-
-            p_file_header = reinterpret_cast<IMAGE_FILE_HEADER *>(reinterpret_cast<uintptr_t>(p_signature) + sizeof(uint32_t));
-
-            std::streampos theoretical_section_headers_size{p_file_header->NumberOfSections * sizeof(IMAGE_SECTION_HEADER)};
-            if (file_size < file_nt_size + theoretical_section_headers_size)
-            {
-                clear();
-                setError("loadFromFile(): File is missing some or all of its section headers");
-                return false;
-            }
-
-            p_optional_header = reinterpret_cast<IMAGE_OPTIONAL_HEADER *>(reinterpret_cast<uintptr_t>(p_file_header) + sizeof(IMAGE_FILE_HEADER));
-
-            if (p_file_header->NumberOfSections > 0)
-            {
-                p_first_section_header = reinterpret_cast<IMAGE_SECTION_HEADER *>(reinterpret_cast<uintptr_t>(p_optional_header) + sizeof(IMAGE_OPTIONAL_HEADER));
-
-                if (hasProperty(PE_Properties::DATA))
-                {
-                    p_start_of_data = reinterpret_cast<uint8_t *>(reinterpret_cast<uintptr_t>(p_first_section_header) + theoretical_section_headers_size);
-
-                    /* Sections data validation depends on if the image was resolved on not */
-                    if (hasProperty(PE_Properties::RESOLVED))
-                    {
-                        IMAGE_SECTION_HEADER *p_last_section{findLastSectionAlignedSection()};
-
-                        if (p_last_section == nullptr)
-                        {
-                            clear();
-                            setError("loadFromFile(): Failed to get last section aligned section (maybe the PE isn't resolved)");
-                            return false;
-                        }
-
-                        if (file_size < p_last_section->VirtualAddress + p_last_section->Misc.VirtualSize)
-                        {
-                            clear();
-                            setError("loadFromFile(): File's size is too small to possibly contain all the sections' data");
-                            return false;
-                        }
-                    }
-                    else
-                    {
-                        IMAGE_SECTION_HEADER *p_last_section{findLastFileAlignedSection()};
-
-                        /* It "could" be possible that no section has raw data */
-                        if (p_last_section != nullptr && file_size < p_last_section->PointerToRawData + p_last_section->SizeOfRawData)
-                        {
-                            clear();
-                            setError("loadFromFile(): File's size is too small to possibly contain all the sections' data");
-                            return false;
-                        }
-                    }
-                }
-            }
-
-            is_loaded = true;
             file.close();
-            return true;
+            is_loaded = validate(file_size);
+            return is_loaded;
         }
 
         bool loadFromMemory(void *module, PE_Properties specified_properties)
@@ -197,14 +117,12 @@ namespace EzPE
             }
 
             const uintptr_t base{reinterpret_cast<uintptr_t>(module)};
-
             p_dos_header = reinterpret_cast<IMAGE_DOS_HEADER *>(base);
 
             if (p_dos_header->e_magic != IMAGE_DOS_SIGNATURE)
             {
                 setError("loadFromMemory(): Invalid DOS signature \"0x%x\", should be 0x%x", p_dos_header->e_magic, IMAGE_DOS_SIGNATURE);
                 clear(false);
-
                 return false;
             }
 
@@ -258,19 +176,25 @@ namespace EzPE
             is_allocated = true;
             memcpy(p_dos_header, p_resource_data, resource_size);
 
+            is_loaded = validate(resource_size);
+            return is_loaded;
+        }
+
+        bool validate(size_t size)
+        {
             if (p_dos_header->e_magic != IMAGE_DOS_SIGNATURE)
             {
                 clear();
-                setError("loadFromResource(): File's DOS signature is invalid");
+                setError("validate(): File's DOS signature is invalid");
                 return false;
             }
 
             size_t file_nt_size{p_dos_header->e_lfanew + sizeof(uint32_t) + sizeof(IMAGE_FILE_HEADER) + sizeof(IMAGE_OPTIONAL_HEADER)};
 
-            if (resource_size < file_nt_size)
+            if (size < file_nt_size)
             {
                 clear();
-                setError("loadFromResource(): File's size is not large enough to possibly contain all NT headers");
+                setError("validate(): File's size is not large enough to possibly contain all NT headers");
                 return false;
             }
 
@@ -281,17 +205,17 @@ namespace EzPE
             if (*p_signature != IMAGE_NT_SIGNATURE)
             {
                 clear();
-                setError("loadFromResource(): File's NT signature is invalid");
+                setError("validate(): File's NT signature is invalid");
                 return false;
             }
 
             p_file_header = reinterpret_cast<IMAGE_FILE_HEADER *>(reinterpret_cast<uintptr_t>(p_signature) + sizeof(uint32_t));
 
             std::streampos theoretical_section_headers_size{p_file_header->NumberOfSections * sizeof(IMAGE_SECTION_HEADER)};
-            if (resource_size < file_nt_size + theoretical_section_headers_size)
+            if (size < file_nt_size + theoretical_section_headers_size)
             {
                 clear();
-                setError("loadFromResource(): File is missing some or all of its section headers");
+                setError("validate(): File is missing some or all of its section headers");
                 return false;
             }
 
@@ -313,14 +237,14 @@ namespace EzPE
                         if (p_last_section == nullptr)
                         {
                             clear();
-                            setError("loadFromResource(): Failed to get last section aligned section (maybe the PE isn't resolved)");
+                            setError("validate(): Failed to get last section aligned section (maybe the PE isn't resolved)");
                             return false;
                         }
 
-                        if (resource_size < p_last_section->VirtualAddress + p_last_section->Misc.VirtualSize)
+                        if (size < p_last_section->VirtualAddress + p_last_section->Misc.VirtualSize)
                         {
                             clear();
-                            setError("loadFromResource(): File's size is too small to possibly contain all the sections' data");
+                            setError("validate(): File's size is too small to possibly contain all the sections' data");
                             return false;
                         }
                     }
@@ -329,17 +253,16 @@ namespace EzPE
                         IMAGE_SECTION_HEADER *p_last_section{findLastFileAlignedSection()};
 
                         /* It "could" be possible that no section has raw data */
-                        if (p_last_section != nullptr && resource_size < p_last_section->PointerToRawData + p_last_section->SizeOfRawData)
+                        if (p_last_section != nullptr && size < p_last_section->PointerToRawData + p_last_section->SizeOfRawData)
                         {
                             clear();
-                            setError("loadFromResource(): Resource size is too small to possibly contain all the sections' data");
+                            setError("validate(): Resource size is too small to possibly contain all the sections' data");
                             return false;
                         }
                     }
                 }
             }
 
-            is_loaded = true;
             return true;
         }
 
