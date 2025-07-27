@@ -78,6 +78,7 @@ namespace EzPE
 
             // Allocate memory and read entire file
             p_dos_header = reinterpret_cast<IMAGE_DOS_HEADER *>(new char[file_size]);
+            properties = specified_properties;
             is_allocated = true;
             file.read(reinterpret_cast<char *>(p_dos_header), file_size);
 
@@ -128,10 +129,18 @@ namespace EzPE
             p_optional_header = reinterpret_cast<IMAGE_OPTIONAL_HEADER *>(reinterpret_cast<uintptr_t>(p_file_header) + sizeof(IMAGE_FILE_HEADER));
 
             if (p_file_header->NumberOfSections > 0)
+            {
                 p_first_section_header = reinterpret_cast<IMAGE_SECTION_HEADER *>(reinterpret_cast<uintptr_t>(p_optional_header) + sizeof(IMAGE_OPTIONAL_HEADER));
 
+                if (hasProperty(PE_Properties::DATA))
+                {
+                    p_start_of_data = reinterpret_cast<uint8_t *>(reinterpret_cast<uintptr_t>(p_dos_header) + p_first_section_header->PointerToRawData);
+
+                    // Add checks that it is possible for the data to exist here and make it depend on the resolved status
+                }
+            }
+
             is_loaded = true;
-            properties = specified_properties;
             file.close();
             return true;
         }
@@ -157,6 +166,11 @@ namespace EzPE
             p_start_of_data = nullptr;
             properties = PE_Properties::NONE;
             is_loaded = false;
+        }
+
+        constexpr bool hasProperty(PE_Properties property)
+        {
+            return (static_cast<std::underlying_type_t<PE_Properties>>(properties) & static_cast<std::underlying_type_t<PE_Properties>>(property)) != 0;
         }
 
         //
