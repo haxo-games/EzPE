@@ -36,7 +36,7 @@ namespace EzPE
         // [LOCAL_SECTION] Constructors & destructors
         //
 
-        PE(void){};
+        PE(void) {};
         PE(const char *path, PE_Properties specified_properties)
         {
             loadFromFile(path, specified_properties);
@@ -177,7 +177,7 @@ namespace EzPE
             return true;
         }
 
-        bool loadFromMemory( void* module, PE_Properties specified_properties )
+        bool loadFromMemory(void *module, PE_Properties specified_properties)
         {
             if (is_loaded)
             {
@@ -185,9 +185,9 @@ namespace EzPE
                 return false;
             }
 
-            const uintptr_t base{ reinterpret_cast<uintptr_t>(module) };
+            const uintptr_t base{reinterpret_cast<uintptr_t>(module)};
 
-            p_dos_header = reinterpret_cast<IMAGE_DOS_HEADER*>(base);
+            p_dos_header = reinterpret_cast<IMAGE_DOS_HEADER *>(base);
 
             if (p_dos_header->e_magic != IMAGE_DOS_SIGNATURE)
             {
@@ -197,8 +197,8 @@ namespace EzPE
                 return false;
             }
 
-            p_dos_stub = reinterpret_cast<uint8_t*>(base + sizeof(*p_dos_header));
-            p_signature = reinterpret_cast<uint32_t*>(base + p_dos_header->e_lfanew);
+            p_dos_stub = reinterpret_cast<uint8_t *>(base + sizeof(*p_dos_header));
+            p_signature = reinterpret_cast<uint32_t *>(base + p_dos_header->e_lfanew);
 
             if (*p_signature != IMAGE_NT_SIGNATURE)
             {
@@ -208,12 +208,35 @@ namespace EzPE
                 return false;
             }
 
-            p_file_header = reinterpret_cast<IMAGE_FILE_HEADER*>(reinterpret_cast<uintptr_t>(p_signature) + sizeof(*p_signature));
-            p_optional_header = reinterpret_cast<IMAGE_OPTIONAL_HEADER*>(reinterpret_cast<uintptr_t>(p_file_header) + sizeof(*p_file_header));
+            p_file_header = reinterpret_cast<IMAGE_FILE_HEADER *>(reinterpret_cast<uintptr_t>(p_signature) + sizeof(*p_signature));
+            p_optional_header = reinterpret_cast<IMAGE_OPTIONAL_HEADER *>(reinterpret_cast<uintptr_t>(p_file_header) + sizeof(*p_file_header));
 
             is_loaded = true;
             properties = specified_properties;
 
+            return true;
+        }
+
+        bool loadFromResource(HRSRC h_resource)
+        {
+            HGLOBAL h_memory{LoadResource(0, h_resource)};
+
+            if (!h_memory)
+            {
+                setError("loadFromResource(): Failed to get handle from LoadResource()");
+                return false;
+            }
+
+            DWORD resource_size{SizeofResource(0, h_resource)};
+            LPVOID p_resource_data{LockResource(h_memory)};
+
+            if (!p_resource_data || resource_size == 0)
+            {
+                setError("loadFromResource(): Failed to get size of resource or to lock it");
+                return false;
+            }
+
+            is_loaded = true;
             return true;
         }
 
@@ -256,7 +279,7 @@ namespace EzPE
             return p_last_section;
         }
 
-        void clear(bool clear_error_string=true)
+        void clear(bool clear_error_string = true)
         {
             if (is_allocated)
             {
@@ -310,7 +333,7 @@ namespace EzPE
         void setError(std::string fmt, ...)
         {
             /* Clear error if empty message */
-            if ( fmt.size() == 0 )
+            if (fmt.size() == 0)
             {
                 has_error = false;
                 error_message.clear();
@@ -318,14 +341,14 @@ namespace EzPE
             }
 
             va_list args;
-            va_start( args, fmt );
+            va_start(args, fmt);
 
-            char* buf{ new char[0x1000] };
-            vsprintf_s( buf, 0x1000, fmt.c_str(), args );
+            char *buf{new char[0x1000]};
+            vsprintf_s(buf, 0x1000, fmt.c_str(), args);
             error_message = buf;
 
             delete[] buf;
-            va_end( args );
+            va_end(args);
             has_error = true;
         }
 
