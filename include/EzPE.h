@@ -3,6 +3,7 @@
 #include <cstdint>
 
 #include <fstream>
+#include <type_traits>
 
 #include <windows.h>
 
@@ -15,8 +16,8 @@ namespace EzPE
     enum class PE_Properties : uint8_t
     {
         NONE = 0,
-        RESOLVED = 1 << 0,
-        DATA = 1 << 1,
+        RESOLVED = 1 << 0, // Doesn't exactly mean that the image was resolve, but rather that it was fully mapped to virtual memory (which usually mean resolved, but has more to do with section data)
+        DATA = 1 << 1,     // Indicates that sections data should be considered
     };
 
     class PE
@@ -134,9 +135,15 @@ namespace EzPE
 
                 if (hasProperty(PE_Properties::DATA))
                 {
-                    p_start_of_data = reinterpret_cast<uint8_t *>(reinterpret_cast<uintptr_t>(p_dos_header) + p_first_section_header->PointerToRawData);
+                    p_start_of_data = reinterpret_cast<uint8_t *>(reinterpret_cast<uintptr_t>(p_first_section_header) + theoretical_section_headers_size);
 
-                    // Add checks that it is possible for the data to exist here and make it depend on the resolved status
+                    /* Sections data validation depends on if the image was resolved on not */
+                    if (hasProperty(PE_Properties::RESOLVED))
+                    {
+                    }
+                    else
+                    {
+                    }
                 }
             }
 
@@ -168,7 +175,7 @@ namespace EzPE
             is_loaded = false;
         }
 
-        constexpr bool hasProperty(PE_Properties property)
+        constexpr bool hasProperty(PE_Properties property) const
         {
             return (static_cast<std::underlying_type_t<PE_Properties>>(properties) & static_cast<std::underlying_type_t<PE_Properties>>(property)) != 0;
         }
