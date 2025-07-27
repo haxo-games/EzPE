@@ -95,7 +95,9 @@ namespace EzPE
                 return false;
             }
 
-            if (file_size < p_dos_header->e_lfanew + sizeof(uint32_t) + sizeof(IMAGE_FILE_HEADER) + sizeof(IMAGE_OPTIONAL_HEADER))
+            std::streampos file_nt_size{p_dos_header->e_lfanew + sizeof(uint32_t) + sizeof(IMAGE_FILE_HEADER) + sizeof(IMAGE_OPTIONAL_HEADER)};
+
+            if (file_size < file_nt_size)
             {
                 clear();
                 setError("loadFromFile(): File's size is not large enough to possibly contain all NT headers");
@@ -114,7 +116,19 @@ namespace EzPE
             }
 
             p_file_header = reinterpret_cast<IMAGE_FILE_HEADER *>(reinterpret_cast<uintptr_t>(p_signature) + sizeof(uint32_t));
+
+            std::streampos theoretical_section_headers_size{p_file_header->NumberOfSections * sizeof(IMAGE_SECTION_HEADER)};
+            if (file_size < file_nt_size + theoretical_section_headers_size)
+            {
+                clear();
+                setError("loadFromFile(): File is missing some or all of its section headers");
+                return false;
+            }
+
             p_optional_header = reinterpret_cast<IMAGE_OPTIONAL_HEADER *>(reinterpret_cast<uintptr_t>(p_file_header) + sizeof(IMAGE_FILE_HEADER));
+
+            if (p_file_header->NumberOfSections > 0)
+                p_first_section_header = reinterpret_cast<IMAGE_SECTION_HEADER *>(reinterpret_cast<uintptr_t>(p_optional_header) + sizeof(IMAGE_OPTIONAL_HEADER));
 
             is_loaded = true;
             properties = specified_properties;
