@@ -47,7 +47,7 @@ namespace EzPE
         // [LOCAL_SECTION] Constructors & destructors
         //
 
-        PE(void) {};
+        PE() {};
 
         PE(const char *path, PE_Properties specified_properties)
         {
@@ -91,7 +91,7 @@ namespace EzPE
                 return false;
             }
 
-            size_t file_size{file.tellg()};
+            size_t file_size{static_cast<size_t>(file.tellg())};
             file.seekg(0);
 
             if (file_size < sizeof(IMAGE_DOS_HEADER))
@@ -188,6 +188,28 @@ namespace EzPE
 
             is_loaded = validate(resource_size);
             return is_loaded;
+        }
+
+        uint32_t alignToSection(uint32_t value)
+        {
+            if (!is_loaded)
+            {
+                setError("alignToSection(): PE is not loaded");
+                return false;
+            }
+
+            return ((value + p_optional_header->SectionAlignment - 1) / p_optional_header->SectionAlignment) * p_optional_header->SectionAlignment;
+        }
+
+        uint32_t alignToFile(uint32_t value)
+        {
+            if (!is_loaded)
+            {
+                setError("alignToFile(): PE is not loaded");
+                return false;
+            }
+
+            return ((value + p_optional_header->FileAlignment - 1) / p_optional_header->FileAlignment) * p_optional_header->FileAlignment;
         }
 
         IMAGE_SECTION_HEADER *findLastFileAlignedSection() const
@@ -343,7 +365,7 @@ namespace EzPE
 
             p_file_header = reinterpret_cast<IMAGE_FILE_HEADER *>(reinterpret_cast<uintptr_t>(p_signature) + sizeof(uint32_t));
 
-            std::streampos theoretical_section_headers_size{p_file_header->NumberOfSections * sizeof(IMAGE_SECTION_HEADER)};
+            size_t theoretical_section_headers_size{p_file_header->NumberOfSections * sizeof(IMAGE_SECTION_HEADER)};
             if (size < file_nt_size + theoretical_section_headers_size)
             {
                 clear();
