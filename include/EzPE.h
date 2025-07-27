@@ -37,9 +37,20 @@ namespace EzPE
         //
 
         PE(void) {};
+
         PE(const char *path, PE_Properties specified_properties)
         {
             loadFromFile(path, specified_properties);
+        }
+
+        PE(void *module, PE_Properties specified_properties)
+        {
+            loadFromMemory(module, specified_properties);
+        }
+
+        PE(HRSRC h_resource, PE_Properties specified_properties)
+        {
+            loadFromResource(h_resource, specified_properties);
         }
 
         PE(const PE &) = delete;
