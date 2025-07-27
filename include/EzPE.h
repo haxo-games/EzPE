@@ -152,6 +152,45 @@ namespace EzPE
             return true;
         }
 
+        IMAGE_SECTION_HEADER *findLastFileAlignedSection() const
+        {
+            if (!is_loaded || p_first_section_header == nullptr)
+                return nullptr;
+
+            IMAGE_SECTION_HEADER *p_last_section{};
+
+            for (int i{}; i < p_file_header->NumberOfSections; i++)
+            {
+                IMAGE_SECTION_HEADER &current_section_header{p_first_section_header[i]};
+
+                if (current_section_header.SizeOfRawData == 0)
+                    continue;
+
+                if (p_last_section == nullptr || current_section_header.PointerToRawData > p_last_section->PointerToRawData)
+                    p_last_section = &current_section_header;
+            }
+
+            return p_last_section;
+        }
+
+        IMAGE_SECTION_HEADER *findLastSectionAlignedSection() const
+        {
+            if (!is_loaded || p_first_section_header == nullptr)
+                return nullptr;
+
+            IMAGE_SECTION_HEADER *p_last_section{};
+
+            for (int i{}; i < p_file_header->NumberOfSections; i++)
+            {
+                IMAGE_SECTION_HEADER &current_section_header{p_first_section_header[i]};
+
+                if (p_last_section == nullptr || current_section_header.VirtualAddress > p_last_section->VirtualAddress)
+                    p_last_section = &current_section_header;
+            }
+
+            return p_last_section;
+        }
+
         void clear()
         {
             if (is_allocated)
