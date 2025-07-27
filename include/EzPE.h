@@ -140,9 +140,33 @@ namespace EzPE
                     /* Sections data validation depends on if the image was resolved on not */
                     if (hasProperty(PE_Properties::RESOLVED))
                     {
+                        IMAGE_SECTION_HEADER *p_last_section{findLastSectionAlignedSection()};
+
+                        if (p_last_section == nullptr)
+                        {
+                            clear();
+                            setError("loadFromFile(): Failed to get last section aligned section (maybe the PE isn't resolved)");
+                            return false;
+                        }
+
+                        if (file_size < p_last_section->VirtualAddress + p_last_section->Misc.VirtualSize)
+                        {
+                            clear();
+                            setError("loadFromFile(): File's size is too small to possibly contain all the sections' data");
+                            return false;
+                        }
                     }
                     else
                     {
+                        IMAGE_SECTION_HEADER *p_last_section{findLastFileAlignedSection()};
+
+                        /* It "could" be possible that no section has raw data */
+                        if (p_last_section != nullptr && file_size < p_last_section->PointerToRawData + p_last_section->SizeOfRawData)
+                        {
+                            clear();
+                            setError("loadFromFile(): File's size is too small to possibly contain all the sections' data");
+                            return false;
+                        }
                     }
                 }
             }
