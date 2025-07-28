@@ -27,7 +27,7 @@ namespace EzPE
     enum class PE_Properties : uint8_t
     {
         NONE = 0,
-        RESOLVED = 1 << 0, // Doesn't exactly mean that the image was resolve, but rather that it was fully mapped to virtual memory (which usually mean resolved, but has more to do with section data)
+        MAPPED = 1 << 0, // Fully mapped to virtual memory
         DATA = 1 << 1,     // Indicates that sections data should be considered
     };
 
@@ -238,6 +238,43 @@ namespace EzPE
             return is_loaded;
         }
 
+        void* getExportedFunction(std::string export_name)
+        {
+            if (!is_loaded || !p_optional_header)
+            {
+                setError("getExportedFunction(): PE is not loaded");
+                return nullptr;
+            }
+
+            if (p_optional_header->DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].Size == 0)
+            {
+                setError("getExportedFunction(): PE has no exported functions");
+                return nullptr;
+            }
+
+            uintptr_t const base{reinterpret_cast<uintptr_t>(p_dos_header)};
+
+            IMAGE_EXPORT_DIRECTORY* p_export_directory
+            {reinterpret_cast<IMAGE_EXPORT_DIRECTORY*>(base + p_optional_header->DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress)};
+            
+            uint32_t* export_names{reinterpret_cast<uint32_t*>(base + p_export_directory->AddressOfNames)};
+            uint32_t* export_offsets{reinterpret_cast<uint32_t*>(base + p_export_directory->AddressOfFunctions)};
+            uint16_t* export_ordinals{reinterpret_cast<uint16_t*>(base + p_export_directory->AddressOfNameOrdinals)};
+
+            for (int32_t i{0}; i != p_export_directory->NumberOfFunctions; ++i)
+            {
+                std::string current_export_name{reinterpret_cast<const char*>(base + export_names[i])};
+
+                if (export_name == current_export_name)
+                {
+                    return reinterpret_cast<void*>(base + export_offsets[export_ordinals[i]]);
+                }
+            }
+
+            setError("getExportedFunction(): could not find exported function %s", export_name.c_str());
+            return nullptr;
+        }
+
         uint32_t alignToSection(uint32_t value)
         {
             if (!is_loaded)
@@ -432,7 +469,7 @@ namespace EzPE
                     p_start_of_data = reinterpret_cast<uint8_t *>(reinterpret_cast<uintptr_t>(p_first_section_header) + theoretical_section_headers_size);
 
                     /* Sections data validation depends on if the image was resolved on not */
-                    if (hasProperty(PE_Properties::RESOLVED))
+                    if (hasProperty(PE_Properties::MAPPED))
                     {
                         IMAGE_SECTION_HEADER *p_last_section{findLastSectionAlignedSection()};
 
